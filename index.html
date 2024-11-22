@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Calculadora de Consumo de Tubería</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+    .container {
+      max-width: 900px;
+      margin: 20px auto;
+      padding: 20px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .title {
+      font-size: 2rem;
+      margin-bottom: 20px;
+      text-align: center;
+      color: #007bff;
+    }
+    .buttons {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .button {
+      padding: 12px 25px;
+      border: none;
+      border-radius: 5px;
+      font-size: 1.1rem;
+      cursor: pointer;
+      text-align: center;
+      text-decoration: none;
+      color: white;
+      transition: all 0.3s ease;
+    }
+    .button.green {
+      background-color: #28a745;
+    }
+    .button.red {
+      background-color: #dc3545;
+    }
+    .button.blue {
+      background-color: #007bff;
+    }
+    .button.orange {
+      background-color: #fd7e14;
+    }
+    .button:hover {
+      opacity: 0.9;
+      transform: scale(1.05);
+    }
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    .table th,
+    .table td {
+      border: 1px solid #ddd;
+      padding: 12px;
+      text-align: left;
+    }
+    .table th {
+      background-color: #f4f4f9;
+      font-weight: bold;
+    }
+    .subtitle {
+      font-size: 1.5rem;
+      margin-top: 30px;
+      margin-bottom: 20px;
+      color: #007bff;
+    }
+    
+    /* Mejoras en el campo de descripción */
+    .descripcion-textarea {
+      width: 100%;
+      min-height: 60px;
+      max-height: 150px;
+      padding: 10px;
+      font-size: 16px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      resize: vertical;
+    }
+
+    /* Estilo para las celdas de la tabla con inputs */
+    .table input[type="number"] {
+      width: 100%;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+
+    .table input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      box-sizing: border-box;
+      font-size: 14px;
+    }
+
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2 class="title">Calculadora de Consumo de Tubería</h2>
+    <div class="buttons">
+      <label class="button green" for="fileInput">Cargar archivo Excel</label>
+      <input type="file" id="fileInput" accept=".xlsx, .xls" style="display: none;">
+      <button id="clearButton" class="button red">Limpiar datos</button>
+      <button id="downloadTemplateButton" class="button orange">Descargar Plantilla</button>
+    </div>
+    <div>
+      <table id="dataTable" class="table">
+        <thead>
+          <tr>
+            <th>Descripción</th>
+            <th>Largo (mm)</th>
+            <th>Cantidad</th>
+            <th>Consumo (tubos)</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+      <button id="addRowButton" class="button blue">Agregar Fila</button>
+    </div>
+    <div>
+      <h3 class="subtitle">Corte Total Tuberia</h3>
+      <table id="summaryTable" class="table">
+        <thead>
+          <tr>
+            <th>Descripción</th>
+            <th>Piezas totales a cortar</th>
+            <th>Largo Total (mm)</th>
+            <th>Consumo Total (tubos)</th>
+          </tr>
+        </thead>
+        <tbody id="summaryBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    const LONGITUD_TUBO = 5800;
+    let rows = [];
+
+    // Leer archivo Excel
+    document.getElementById('fileInput').addEventListener('change', (event) => {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet);
+
+        // Procesar los datos según las columnas requeridas
+        rows = jsonData.map((row, index) => ({
+          id: Date.now() + index,
+          descripcion: row['MATERIALES'] || 'Sin descripción',
+          largo: Number(row['LARGO']) || 0,
+          cantidad: Number(row['Cantidad']) || 0,
+        }));
+
+        updateTable();
+        updateSummary();
+      };
+
+      reader.readAsArrayBuffer(file);
+    });
+
+    // Recargar la página al presionar "Limpiar datos"
+    document.getElementById('clearButton').addEventListener('click', () => {
+      location.reload();
+    });
+
+    document.getElementById('addRowButton').addEventListener('click', () => {
+      rows.push({ id: Date.now(), descripcion: '', largo: 0, cantidad: 0 });
+      updateTable();
+    });
+
+    // Descargar plantilla Excel
+    document.getElementById('downloadTemplateButton').addEventListener('click', () => {
+      const ws = XLSX.utils.aoa_to_sheet([ 
+        ['MATERIALES', 'LARGO', 'Cantidad'], // Títulos de columna
+        ['', '', ''], // Fila vacía para ejemplo
+      ]);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Plantilla');
+      XLSX.writeFile(wb, 'Plantilla_Consumo_Tuberia.xlsx');
+    });
+
+    function updateTable() {
+      const tableBody = document.getElementById('tableBody');
+      tableBody.innerHTML = '';
+      rows.forEach((row) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><textarea class="descripcion-textarea" data-id="${row.id}" data-field="descripcion">${row.descripcion}</textarea></td>
+          <td><input type="number" value="${row.largo}" data-id="${row.id}" data-field="largo"></td>
+          <td><input type="number" value="${row.cantidad}" data-id="${row.id}" data-field="cantidad"></td>
+          <td>${((row.largo * row.cantidad) / LONGITUD_TUBO).toFixed(3)}</td>
+          <td><button class="deleteButton" data-id="${row.id}">Eliminar</button></td>
+        `;
+        tableBody.appendChild(tr);
+      });
+
+      document.querySelectorAll('textarea').forEach((textarea) => {
+        textarea.addEventListener('change', (e) => {
+          const { id, field } = e.target.dataset;
+          const value = e.target.value;
+          rows = rows.map((row) =>
+            row.id === Number(id) ? { ...row, [field]: value } : row
+          );
+          updateTable();
+          updateSummary();
+        });
+      });
+
+      document.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('change', (e) => {
+          const { id, field } = e.target.dataset;
+          const value = Number(e.target.value);
+          rows = rows.map((row) =>
+            row.id === Number(id) ? { ...row, [field]: value } : row
+          );
+          updateTable();
+          updateSummary();
+        });
+      });
+
+      document.querySelectorAll('.deleteButton').forEach((button) => {
+        button.addEventListener('click', (e) => {
+          const id = Number(e.target.dataset.id);
+          rows = rows.filter((row) => row.id !== id);
+          updateTable();
+          updateSummary();
+        });
+      });
+    }
+
+    function updateSummary() {
+      const summaryBody = document.getElementById('summaryBody');
+      summaryBody.innerHTML = '';
+      const totals = rows.reduce((acc, row) => {
+        const key = row.descripcion;
+        if (!acc[key]) {
+          acc[key] = { largo: 0, cantidad: 0, consumo: 0 };
+        }
+        acc[key].largo += row.largo * row.cantidad;
+        acc[key].cantidad += row.cantidad;
+        acc[key].consumo = acc[key].largo / LONGITUD_TUBO;
+        return acc;
+      }, {});
+
+      for (const [desc, data] of Object.entries(totals)) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${desc}</td>
+          <td>${data.cantidad}</td>
+          <td>${data.largo}</td>
+          <td>${data.consumo.toFixed(3)}</td>
+        `;
+        summaryBody.appendChild(tr);
+      }
+    }
+
+    updateTable();
+    updateSummary();
+  </script>
+</body>
+</html>
